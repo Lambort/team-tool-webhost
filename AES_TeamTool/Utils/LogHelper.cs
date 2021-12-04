@@ -3,19 +3,19 @@ using System.IO;
 
 namespace AES_TeamTool.Utils
 {
-    public class CommonTextLogger
+    public class LogHelper
     {
         public static string LogPath { get; set; }
         private static StreamWriter writer;
 
-        static CommonTextLogger()
+        static LogHelper()
         {
 #if DEBUG
-            LogPath = DynamicValueQuery.GetAppSetting("devLogPath");
+            LogPath = ValueQuery.GetAppSetting("devLogPath");
 #endif
 
 #if (!DEBUG)
-            LogPath = DynamicValueQuery.GetAppSetting("prodLogPath");
+              LogPath = DynamicValueQuery.GetAppSetting("prodLogPath");
 #endif
         }
 

@@ -1,18 +1,29 @@
-﻿using System.ComponentModel;
+﻿using System;
+using System.ComponentModel;
+using AES_TeamTool.Utils;
 
 namespace AES_TeamTool.Models
 {
-    public class BaseResponseBody
+    public class ResponseBody
     {
         public int Code { get; set; }
         public string Message { get; set; }
         public object Data { get; set; }
         public object Error { get; set; }
 
-        public BaseResponseBody SetResponse(int code, string message, object data, object error)
+        public ResponseBody SetResponse(int code, string message, object data, object error)
         {
             Code = code;
             Message = message;
+            Data = data;
+            Error = error;
+            return this;
+        }
+
+        public ResponseBody SetResponse(int code, object data, object error = null)
+        {
+            Code = code;
+            Message = ValueQuery.GetDescription((ResultCode)Enum.Parse(typeof(ResultCode), code.ToString()));
             Data = data;
             Error = error;
             return this;

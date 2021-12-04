@@ -6,13 +6,13 @@ using System.Collections.Generic;
 
 namespace AES_TeamTool.Utils
 {
-    public class BaseSQLHandler
+    public class SqlHelper
     {
-        public BaseSQLHandler(string connStr, bool isPooling = false)
+        public SqlHelper(string connStr, bool isPooling = false)
         {
             IsPooling = isPooling;
             ConnectString = connStr;
-            PrePoolString = IsPooling ? @"connection lifetime=5;min pool size = 1;max pool size=10;" : null;
+            PrePoolString = IsPooling ? @"connection lifetime=15;min pool size=1;max pool size=25;" : null;
             PoolOptions = IsPooling ? $@"pooling=true;{PrePoolString}" : null;
             Connection = new SqlConnection(PoolOptions + ConnectString);
             if (IsPooling) { Connection.Open(); }
@@ -30,14 +30,31 @@ namespace AES_TeamTool.Utils
             Connection = new SqlConnection(PoolOptions + ConnectString);
         }
 
+        public void CloseConnection()
+        {
+            if (Connection.State == ConnectionState.Closed) return;
+            Connection.Close();
+        }
+
+        public void DisposeConnection()
+        {
+            CloseConnection();
+            Connection.Dispose();
+        }
+
         public bool InsertDataLine(string tableName, List<string> columnList, List<string> valueList)
         {
             try
             {
-                string colString = columnList.Count > 1 ? string.Join(",", columnList.Select(item => $"[{item}]")) : $"[{columnList[0]}]";
-                string valString = valueList.Count > 1 ? string.Join(",", valueList.Select(item => item == null ? "null" : $"'{item}'"))
-                    : valueList[0] != null ? $"'{valueList[0]}'"
-                    : "null";
+                string colString = string.Empty;
+                string valString = string.Empty;
+                columnList.ForEach(col => colString += col == columnList.Last() ? $"[{col}]" : $"[{col}],");
+                //warning here, if follow linq, value list must be mapped
+                //valueList.ForEach(val => valString += val == valueList.Last() ? $"'{val}'" : $"'{val}',");
+                for(int i=0; i < valueList.Count; i++)
+                {
+                    valString += (i == valueList.Count - 1) ? $"'{valueList[i]}'" : $"'{valueList[i]}',";
+                }
                 if (Connection.State == ConnectionState.Closed) { Connection.Open(); }
                 string command = $@"INSERT INTO {tableName} ( {colString} ) values ( {valString} )";
                 SqlCommand sqlCmd = new SqlCommand(command, Connection);
@@ -47,7 +64,29 @@ namespace AES_TeamTool.Utils
             }
             catch (Exception err)
             {
-                CommonTextLogger.WriteText(LogType.ERROR, err.Message);
+                LogHelper.WriteText(LogType.ERROR, err.Message);
+                return false;
+            }
+            finally
+            {
+                if (!IsPooling && Connection.State == ConnectionState.Open) { Connection.Close(); }
+            }
+        }
+
+        public bool InsertDataLine(string command)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(command)) { throw new Exception("No SQL command to be excute"); }
+                if (Connection.State == ConnectionState.Closed) { Connection.Open(); }
+                SqlCommand sqlCmd = new SqlCommand(command, Connection);
+                sqlCmd.ExecuteNonQuery();
+                sqlCmd.Dispose();
+                return true;
+            }
+            catch (Exception err)
+            {
+                LogHelper.WriteText(LogType.ERROR, err.Message);
                 return false;
             }
             finally
@@ -72,7 +111,7 @@ namespace AES_TeamTool.Utils
             }
             catch (Exception err)
             {
-                CommonTextLogger.WriteText(LogType.ERROR, err.Message);
+                LogHelper.WriteText(LogType.ERROR, err.Message);
                 return false;
             }
             finally
@@ -86,15 +125,18 @@ namespace AES_TeamTool.Utils
         {
             try
             {
-                if (colList.Count == 0 || colList.Count != valList.Count) { return false; }
+                if (colList.Count == 0 || colList.Count != valList.Count || string.IsNullOrWhiteSpace(findCondition))
+                {
+                    throw new Exception("Cannot update data cause, data or condition required!");
+                }
                 string setValString = string.Empty;
                 for (int i = 0; i < colList.Count; i++)
                 {
-                    if (colList[i] != null && colList[i] != string.Empty)
+                    if (string.IsNullOrWhiteSpace(colList[i]))
                     {
-                        string _joinChar = i == 0 ? "" : ",";
-                        string _valChar = (valList[i] == null || valList[i] == string.Empty) ? "NULL" : valList[i].ToString();
-                        setValString += $"{_joinChar} {colList[i]}='{_valChar}'";
+                        string joinChar = i == 0 ? "" : ",";
+                        string valChar = string.IsNullOrWhiteSpace(valList[i]) ? "NULL" : valList[i];
+                        setValString += $"{joinChar} {colList[i]}='{valChar}'";
                     }
                 }
                 if (Connection.State == ConnectionState.Closed) { Connection.Open(); }
@@ -106,7 +148,7 @@ namespace AES_TeamTool.Utils
             }
             catch (Exception err)
             {
-                CommonTextLogger.WriteText(LogType.ERROR, err.Message);
+                LogHelper.WriteText(LogType.ERROR, err.Message);
                 return false;
             }
             finally
@@ -115,14 +157,16 @@ namespace AES_TeamTool.Utils
             }
         }
 
-        public DataTable CommonQuery(string tableName, string selectColumns, string queryConditions)
+        public DataTable CommonQuery(string tableName, string selectColumns, string queryConditions = null, string queryOrder = null)
         {
             DataTable queryResultData = new DataTable();
             try
             {
-                string queryStr = $@"SELECT {selectColumns} FROM {tableName} WHERE {queryConditions}";
+                string columns = string.IsNullOrWhiteSpace(selectColumns) ? "*" : selectColumns;
+                string condition = string.IsNullOrWhiteSpace(queryConditions) ? "" : $"WHERE {queryConditions}";
+                string order = string.IsNullOrWhiteSpace(queryOrder) ? "" : $"order by {queryOrder}";
+                string queryStr = $@"SELECT {columns} FROM {tableName} {condition} {order}";
                 if (Connection.State == ConnectionState.Closed) { Connection.Open(); }
-
                 SqlCommand sqlCmd = new SqlCommand(queryStr, Connection);
                 queryResultData.Load(sqlCmd.ExecuteReader());
                 sqlCmd.Dispose();
@@ -130,7 +174,35 @@ namespace AES_TeamTool.Utils
             }
             catch (Exception err)
             {
-                CommonTextLogger.WriteText(LogType.ERROR, err.Message);
+                LogHelper.WriteText(LogType.ERROR, err.Message);
+                return null;
+            }
+            finally
+            {
+                if (!IsPooling && Connection.State == ConnectionState.Open) { Connection.Close(); }
+            }
+        }
+
+        public DataTable CommonQuery(string tableName, List<string> selectColumns, string queryConditions = null, string queryOrder = null)
+        {
+            DataTable queryResultData = new DataTable();
+            try
+            {
+                string columns = string.Empty;
+                selectColumns.ForEach(col => { columns += col == selectColumns.Last() ? $"[{col}]" : $"[{col}],"; });
+                columns = string.IsNullOrWhiteSpace(columns) ? "*" : columns;
+                string condition = string.IsNullOrWhiteSpace(queryConditions) ? "" : $"WHERE {queryConditions}";
+                string order = string.IsNullOrWhiteSpace(queryOrder) ? "" : $"order by {queryOrder}";
+                string queryStr = $@"SELECT {columns} FROM {tableName} {condition} {order}";
+                if (Connection.State == ConnectionState.Closed) { Connection.Open(); }
+                SqlCommand sqlCmd = new SqlCommand(queryStr, Connection);
+                queryResultData.Load(sqlCmd.ExecuteReader());
+                sqlCmd.Dispose();
+                return queryResultData;
+            }
+            catch (Exception err)
+            {
+                LogHelper.WriteText(LogType.ERROR, err.Message);
                 return null;
             }
             finally
@@ -153,7 +225,7 @@ namespace AES_TeamTool.Utils
             }
             catch (Exception err)
             {
-                CommonTextLogger.WriteText(LogType.ERROR, err.Message);
+                LogHelper.WriteText(LogType.ERROR, err.Message);
                 return null;
             }
             finally

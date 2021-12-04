@@ -7,9 +7,9 @@ using System.ComponentModel;
 
 namespace AES_TeamTool.Utils
 {
-    public class BaseMailHandler
+    public class MailHelper
     {
-        public BaseMailHandler()
+        public MailHelper()
         {
             MailMessageInstance = new MailMessage
             {
@@ -44,7 +44,7 @@ namespace AES_TeamTool.Utils
             }
             catch (Exception err)
             {
-                CommonTextLogger.WriteText(LogType.ERROR, err.Message);
+                LogHelper.WriteText(LogType.ERROR, err.Message);
                 return false;
             }
             finally
@@ -67,7 +67,7 @@ namespace AES_TeamTool.Utils
             }
             catch (Exception err)
             {
-                CommonTextLogger.WriteText(LogType.ERROR, err.Message);
+                LogHelper.WriteText(LogType.ERROR, err.Message);
                 return false;
             }
             finally
@@ -82,15 +82,15 @@ namespace AES_TeamTool.Utils
             MailAddress token = (MailAddress)evt.UserState;
             if (evt.Cancelled)
             {
-                CommonTextLogger.WriteText(LogType.WARN, evt.UserState.ToString() + " Canceled");
+                LogHelper.WriteText(LogType.WARN, evt.UserState.ToString() + " Canceled");
             }
             if (evt.Error != null)
             {
-                CommonTextLogger.WriteText(LogType.ERROR, evt.Error.ToString());
+                LogHelper.WriteText(LogType.ERROR, evt.Error.ToString());
             }
             else
             {
-                CommonTextLogger.WriteText(LogType.INFO, "Send Done");
+                LogHelper.WriteText(LogType.INFO, "Send Done");
             }
         }
     }
